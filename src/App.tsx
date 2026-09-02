@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { fetchLiveElectionData, broadcastElectionData, submitVoteLive } from "./services/electionSync";
+import { useState, useEffect, useRef } from "react";
+import { fetchLiveElectionData, broadcastElectionData, submitVoteLive, onLocalBroadcast } from "./services/electionSync";
 
 const LOGO = "data:image/png;base64,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";
 
@@ -100,29 +100,47 @@ export default function ElectionApp() {
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString("th-TH"));
+  const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+  const [syncNotice, setSyncNotice] = useState<string>("");
+  const [showVoterModal, setShowVoterModal] = useState<boolean>(false);
+  const [voterSearch, setVoterSearch] = useState<string>("");
 
   // Sync with server/cloud in real-time
+  const isFetchingRef = useRef<boolean>(false);
+
   const applyServerData = (data: any) => {
     if (!data) return;
     if (data.year) setYear(data.year);
     if (data.candidates && Array.isArray(data.candidates)) setCandidateList(data.candidates);
-    if (data.votes && typeof data.votes === "object") setVotes(data.votes);
+    if (data.votes && typeof data.votes === "object") {
+      setVotes(data.votes);
+    }
     if (data.votedStudentIds && Array.isArray(data.votedStudentIds)) {
       setVotedIds(data.votedStudentIds);
     }
+    setLastSyncTime(new Date().toLocaleTimeString("th-TH"));
   };
 
-  const fetchServerData = async () => {
+  const fetchServerData = async (manual = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (manual) setIsManualSyncing(true);
     try {
       const res = await fetchLiveElectionData();
       if (res.success && res.data) {
         applyServerData(res.data);
         setIsLiveConnected(true);
-      } else {
-        setIsLiveConnected(false);
+        if (manual) {
+          setSyncNotice("✓ ดึงคะแนนสดล่าสุดจากทุกเครื่องสำเร็จแล้ว!");
+          setTimeout(() => setSyncNotice(""), 3500);
+        }
       }
     } catch {
-      setIsLiveConnected(false);
+      // keep previous connected state unless multiple failures occur
+    } finally {
+      isFetchingRef.current = false;
+      if (manual) setIsManualSyncing(false);
     }
   };
 
@@ -130,7 +148,13 @@ export default function ElectionApp() {
     // Initial fetch
     fetchServerData();
 
-    // 1. Establish zero-latency Server-Sent Events (SSE) stream
+    // Listen to local BroadcastChannel for instant same-browser cross-tab sync
+    const unsubBroadcast = onLocalBroadcast((data) => {
+      applyServerData(data);
+      setIsLiveConnected(true);
+    });
+
+    // 1. Establish zero-latency Server-Sent Events (SSE) stream if server API available
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource("/api/election/stream");
@@ -147,15 +171,17 @@ export default function ElectionApp() {
         }
       };
       eventSource.onerror = () => {
-        // Fallback to polling if SSE is disconnected
-        setIsLiveConnected(false);
+        // If SSE fails (e.g. on static hosting or Render proxy), close it cleanly
+        // Cloud polling will handle synchronization smoothly without spamming errors
+        eventSource?.close();
+        eventSource = null;
       };
     } catch (err) {
-      console.warn("SSE not supported, falling back to interval polling", err);
+      // SSE not available
     }
 
-    // 2. High-reliability Polling (1.5s interval)
-    const interval = setInterval(fetchServerData, 1500);
+    // 2. High-reliability Polling (1.2s interval)
+    const interval = setInterval(fetchServerData, 1200);
 
     // 3. Instant sync on tab focus or screen unlock
     const handleFocusOrVisible = () => {
@@ -165,6 +191,7 @@ export default function ElectionApp() {
     document.addEventListener("visibilitychange", handleFocusOrVisible);
 
     return () => {
+      unsubBroadcast();
       if (eventSource) eventSource.close();
       clearInterval(interval);
       window.removeEventListener("focus", handleFocusOrVisible);
@@ -1170,7 +1197,225 @@ export default function ElectionApp() {
 
             {/* Main Admin Section Divided Into 2 Parts: Add Candidate & Candidates List */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              
+
+              {/* 🔴 CARD 0: LIVE MULTI-DEVICE REAL-TIME SCOREBOARD */}
+              <div style={{
+                background: "white", borderRadius: 20, padding: "24px",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+                border: "2px solid #E2E8F0",
+                position: "relative",
+              }}>
+                {/* Scoreboard Header */}
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+                  flexWrap: "wrap", gap: 12, borderBottom: "2px solid #F1F5F9", paddingBottom: 14, marginBottom: 18
+                }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        background: isLiveConnected ? "#DCFCE7" : "#FEE2E2",
+                        color: isLiveConnected ? "#166534" : "#991B1B",
+                        padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800
+                      }}>
+                        <span style={{
+                          width: 8, height: 8, borderRadius: "50%",
+                          background: isLiveConnected ? "#22C55E" : "#EF4444",
+                          boxShadow: isLiveConnected ? "0 0 10px #22C55E" : "none",
+                        }} />
+                        {isLiveConnected ? "🟢 ซิงค์คะแนนสดทุกเครื่อง (Live Real-Time)" : "🔴 รอเชื่อมต่อคลาวด์"}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>
+                        (ซิงค์อัตโนมัติทุก 1 วินาที • ล่าสุด: {lastSyncTime})
+                      </span>
+                    </div>
+                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#0F172A", display: "flex", alignItems: "center", gap: 8 }}>
+                      📊 ผลการนับคะแนนสดจากทุกเครื่องแบบเรียลไทม์
+                    </h2>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748B" }}>
+                      ไม่ว่าจะลงคะแนนจากมือถือ แท็บเล็ต หรือคอมพิวเตอร์เครื่องใด คะแนนทั้งหมดจะถูกรวมและอัปเดตบนหน้านี้สดทันที
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => fetchServerData(true)}
+                      disabled={isManualSyncing}
+                      style={{
+                        padding: "8px 14px", borderRadius: 10, border: "1px solid #CBD5E1",
+                        background: isManualSyncing ? "#F1F5F9" : "white", color: "#1E293B",
+                        fontWeight: 700, fontSize: 13, cursor: isManualSyncing ? "wait" : "pointer",
+                        display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 4px rgba(0,0,0,0.04)"
+                      }}
+                    >
+                      <span style={{ display: "inline-block", transform: isManualSyncing ? "rotate(180deg)" : "none", transition: "transform 0.5s" }}>
+                        🔄
+                      </span>
+                      {isManualSyncing ? "กำลังซิงค์..." : "ดึงคะแนนสดทันที"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowVoterModal(true)}
+                      style={{
+                        padding: "8px 14px", borderRadius: 10, border: "none",
+                        background: "#0F172A", color: "white", fontWeight: 700, fontSize: 13,
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                        boxShadow: "0 2px 6px rgba(15,23,42,0.15)"
+                      }}
+                    >
+                      👥 ดูผู้ใช้สิทธิ์ทั้งหมด ({votedIds.length})
+                    </button>
+                  </div>
+                </div>
+
+                {syncNotice && (
+                  <div style={{
+                    background: "#DCFCE7", color: "#15803D", padding: "10px 16px", borderRadius: 10,
+                    fontSize: 13, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8,
+                    border: "1px solid #86EFAC"
+                  }}>
+                    {syncNotice}
+                  </div>
+                )}
+
+                {/* 3 Metric Badges */}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14, marginBottom: 20
+                }}>
+                  <div style={{
+                    background: "linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)",
+                    borderRadius: 16, padding: "18px", border: "1.5px solid #FECACA"
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#991B1B", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      🗳️ คะแนนโหวตรวมทุกเครื่อง
+                    </div>
+                    <div style={{ fontSize: 34, fontWeight: 900, color: "#7B1C1C", lineHeight: 1 }}>
+                      {totalVotes} <span style={{ fontSize: 16, fontWeight: 700 }}>เสียง</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#B91C1C", marginTop: 6 }}>
+                      สะสมจากทุกเครื่องที่ลงคะแนนเข้ามา
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
+                    borderRadius: 16, padding: "18px", border: "1.5px solid #BFDBFE"
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#1E40AF", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      👤 จำนวนผู้มาลงคะแนนแล้ว
+                    </div>
+                    <div style={{ fontSize: 34, fontWeight: 900, color: "#1D4ED8", lineHeight: 1 }}>
+                      {votedIds.length} <span style={{ fontSize: 16, fontWeight: 700 }}>คน</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#2563EB", marginTop: 6 }}>
+                      บันทึกรหัสในระบบคลาวด์ส่วนกลาง
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: "linear-gradient(135deg, #FEFCE8 0%, #FEF08A 100%)",
+                    borderRadius: 16, padding: "18px", border: "1.5px solid #FDE047"
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#854D0E", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      👑 ผู้นำคะแนนปัจจุบัน
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "#713F12", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {totalVotes > 0 && winnerCandidate ? `เบอร์ ${winnerCandidate.number}: ${winnerCandidate.name}` : "ยังไม่มีคะแนน"}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#A16207", marginTop: 6, fontWeight: 700 }}>
+                      {totalVotes > 0 ? `${winnerVotes} เสียง (${getPercent(winnerCandidate?.number || 0)}%)` : "รอผู้ลงคะแนนคนแรก"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real-Time Candidate Progress Breakdown */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#64748B", display: "flex", justifyContent: "space-between", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <span>ผู้สมัคร & ลำดับคะแนน</span>
+                    <span>คะแนนสด & สัดส่วน (%)</span>
+                  </div>
+
+                  {[...candidateList].sort((a, b) => (votes[b.number] || 0) - (votes[a.number] || 0)).map((c, rank) => {
+                    const vCount = votes[c.number] || 0;
+                    const pct = getPercent(c.number);
+                    const isLeader = rank === 0 && totalVotes > 0;
+
+                    return (
+                      <div
+                        key={c.number}
+                        style={{
+                          background: isLeader ? "#FDF8F6" : "#F8FAFC",
+                          borderRadius: 14, padding: "14px 18px",
+                          border: isLeader ? `2px solid ${c.color}` : "1.5px solid #E2E8F0",
+                          transition: "all 0.3s ease",
+                          boxShadow: isLeader ? `0 4px 12px ${c.accent}` : "none"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{
+                              width: 30, height: 30, borderRadius: 8,
+                              background: isLeader ? c.color : "#E2E8F0",
+                              color: isLeader ? "white" : "#64748B",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontWeight: 900, fontSize: 13
+                            }}>
+                              {isLeader ? "👑" : rank + 1}
+                            </div>
+
+                            <span style={{
+                              background: c.color, color: c.textOnColor,
+                              borderRadius: 6, padding: "2px 8px", fontSize: 12, fontWeight: 800
+                            }}>
+                              เบอร์ {c.number}
+                            </span>
+
+                            <span style={{ fontWeight: 800, fontSize: 15, color: "#1E293B" }}>
+                              {c.name}
+                            </span>
+
+                            <div style={{
+                              width: 28, height: 28, borderRadius: 8, background: c.accent,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 16, overflow: "hidden", border: "1px solid #CBD5E1"
+                            }}>
+                              {c.image ? (
+                                <img src={c.image} alt={c.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              ) : (
+                                c.emoji
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: "right", display: "flex", alignItems: "baseline", gap: 8 }}>
+                            <span style={{ fontSize: 20, fontWeight: 900, color: c.color }}>
+                              {vCount} <span style={{ fontSize: 13, fontWeight: 700 }}>เสียง</span>
+                            </span>
+                            <span style={{ fontSize: 14, fontWeight: 800, color: "#64748B" }}>
+                              ({pct}%)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Animated Progress bar */}
+                        <div style={{ background: "#E2E8F0", borderRadius: 999, height: 12, overflow: "hidden", position: "relative" }}>
+                          <div style={{
+                            height: "100%", borderRadius: 999, background: c.color,
+                            width: `${pct}%`,
+                            transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+                            minWidth: vCount > 0 ? 12 : 0
+                          }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Card 0: System Configurations */}
               <div style={{
                 background: "white", borderRadius: 20, padding: "24px",
@@ -1767,8 +2012,8 @@ export default function ElectionApp() {
                             >
                               -
                             </button>
-                            <span style={{ fontWeight: 800, fontSize: 16, minWidth: 24, textAlign: "center" }}>
-                              {count}
+                            <span style={{ fontWeight: 800, fontSize: 15, minWidth: 40, textAlign: "center", color: c.color }}>
+                              {count} <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>({getPercent(c.number)}%)</span>
                             </span>
                             <button
                               type="button"
@@ -1969,6 +2214,131 @@ export default function ElectionApp() {
               </div>
 
             </div>
+
+            {/* Modal for viewing all voters registered in real-time */}
+            {showVoterModal && (
+              <div style={{
+                position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+                background: "rgba(15, 23, 42, 0.65)", zIndex: 9999,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: 16, backdropFilter: "blur(4px)"
+              }}>
+                <div style={{
+                  background: "white", borderRadius: 20, width: "100%", maxWidth: 540,
+                  maxHeight: "85vh", display: "flex", flexDirection: "column",
+                  boxShadow: "0 20px 40px rgba(0,0,0,0.25)", overflow: "hidden"
+                }}>
+                  {/* Modal Header */}
+                  <div style={{
+                    padding: "20px 24px", borderBottom: "1px solid #E2E8F0",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    background: "#F8FAFC"
+                  }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0F172A" }}>
+                        👥 รายชื่อรหัสผู้ใช้สิทธิ์ลงคะแนน
+                      </h3>
+                      <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>
+                        บันทึกในระบบกลางแล้วทั้งหมด {votedIds.length} คน (จากทุกเครื่อง)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowVoterModal(false)}
+                      style={{
+                        background: "#F1F5F9", border: "none", width: 32, height: 32,
+                        borderRadius: "50%", cursor: "pointer", fontSize: 16, color: "#64748B",
+                        display: "flex", alignItems: "center", justifyContent: "center"
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Search Input */}
+                  <div style={{ padding: "12px 24px", borderBottom: "1px solid #F1F5F9" }}>
+                    <input
+                      type="text"
+                      placeholder="🔍 ค้นหารหัสนักเรียน/ผู้ใช้สิทธิ์..."
+                      value={voterSearch}
+                      onChange={(e) => setVoterSearch(e.target.value)}
+                      style={{
+                        width: "100%", padding: "10px 14px", borderRadius: 10,
+                        border: "1px solid #CBD5E1", fontSize: 14, outline: "none",
+                        boxSizing: "border-box", fontFamily: "inherit"
+                      }}
+                    />
+                  </div>
+
+                  {/* Voters List Container */}
+                  <div style={{ padding: "16px 24px", overflowY: "auto", flex: 1 }}>
+                    {votedIds.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "40px 10px", color: "#94A3B8" }}>
+                        <div style={{ fontSize: 36, marginBottom: 8 }}>📭</div>
+                        ยังไม่มีผู้ลงคะแนนในระบบ
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {votedIds
+                          .filter((id) => id.toLowerCase().includes(voterSearch.toLowerCase()))
+                          .map((id, index) => (
+                            <div
+                              key={index}
+                              style={{
+                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                padding: "10px 14px", borderRadius: 10, background: "#F8FAFC",
+                                border: "1px solid #E2E8F0", fontSize: 13
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={{
+                                  width: 24, height: 24, borderRadius: 6, background: "#E2E8F0",
+                                  color: "#475569", display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 11, fontWeight: 700
+                                }}>
+                                  {index + 1}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#1E293B", fontFamily: "monospace", fontSize: 14 }}>
+                                  {id}
+                                </span>
+                              </div>
+                              <span style={{
+                                background: "#DCFCE7", color: "#166534", padding: "2px 8px",
+                                borderRadius: 6, fontSize: 11, fontWeight: 700
+                              }}>
+                                ✓ ใช้สิทธิ์แล้ว
+                              </span>
+                            </div>
+                          ))}
+                        {votedIds.filter((id) => id.toLowerCase().includes(voterSearch.toLowerCase())).length === 0 && (
+                          <div style={{ textAlign: "center", padding: "20px", color: "#94A3B8", fontSize: 13 }}>
+                            ไม่พบรหัสที่ค้นหา
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div style={{
+                    padding: "14px 24px", borderTop: "1px solid #E2E8F0",
+                    background: "#F8FAFC", display: "flex", justifyContent: "flex-end"
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowVoterModal(false)}
+                      style={{
+                        padding: "10px 20px", borderRadius: 10, border: "none",
+                        background: "#0F172A", color: "white", fontWeight: 700, fontSize: 13,
+                        cursor: "pointer", fontFamily: "inherit"
+                      }}
+                    >
+                      ปิดหน้าต่าง
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -1,5 +1,8 @@
 // Real-Time Cross-Device Synchronization Service for Election App
-// Supports Express API + Cloud Live Sync Relay so all devices (mobile, desktop, kiosk) always match 100%
+// Supports:
+// 1. Dual Cloud Sync (restful-api.dev primary + backup) for Static hosting (Render, Vercel, Netlify) & cross-device mobile/PC
+// 2. Local Express server API (/api/*) when running full-stack
+// 3. Browser BroadcastChannel for instant same-device cross-tab synchronization
 
 export interface Candidate {
   number: number;
@@ -19,158 +22,242 @@ export interface ElectionData {
   votes: Record<number, number>;
   votedStudentIds: string[];
   lastUpdated: number;
+  resetTimestamp?: number;
 }
 
-const CLOUD_SYNC_URL = "https://api.jsonstorage.net/v1/json/87cb06bb-14b0-42c6-a2ec-5e352f75863e";
-const BACKUP_SYNC_URL = "https://kv.val.run/dbsurat_election_2570_live";
+const CLOUD_PRIMARY_URL = "https://api.restful-api.dev/objects/ff808181a061cdc401a062c8b32204a6";
+const CLOUD_BACKUP_URL = "https://api.restful-api.dev/objects/ff808181a061cdc401a062cae18f04ac";
+
+// Local tab broadcast channel
+let bc: BroadcastChannel | null = null;
+try {
+  if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+    bc = new BroadcastChannel("dbsurat_election_live_channel");
+  }
+} catch {}
+
+export function onLocalBroadcast(callback: (data: ElectionData) => void): () => void {
+  if (!bc) return () => {};
+  const handler = (event: MessageEvent) => {
+    if (event.data && typeof event.data === "object" && event.data.votes) {
+      callback(event.data);
+    }
+  };
+  bc.addEventListener("message", handler);
+  return () => {
+    bc?.removeEventListener("message", handler);
+  };
+}
+
+export function mergeElectionData(a: ElectionData | null, b: ElectionData | null): ElectionData {
+  if (!a && b) return b;
+  if (!b && a) return a;
+  if (!a && !b) {
+    return {
+      year: "ปีการศึกษา 2570",
+      candidates: [],
+      votes: {},
+      votedStudentIds: [],
+      lastUpdated: Date.now(),
+    };
+  }
+
+  const resetTimeA = a?.resetTimestamp || 0;
+  const resetTimeB = b?.resetTimestamp || 0;
+
+  // If one dataset had a full reset newer than the other, honor the reset
+  if (resetTimeA > 0 && resetTimeA > (b?.lastUpdated || 0)) {
+    return a!;
+  }
+  if (resetTimeB > 0 && resetTimeB > (a?.lastUpdated || 0)) {
+    return b!;
+  }
+
+  // Merge votes by taking the maximum vote count for each candidate so no votes are lost across devices
+  const mergedVotes: Record<number, number> = { ...(a?.votes || {}) };
+  for (const [k, v] of Object.entries(b?.votes || {})) {
+    const num = Number(k);
+    mergedVotes[num] = Math.max(mergedVotes[num] || 0, Number(v) || 0);
+  }
+
+  const mergedVoted = Array.from(new Set([...(a?.votedStudentIds || []), ...(b?.votedStudentIds || [])]));
+
+  return {
+    year: b?.year || a?.year || "ปีการศึกษา 2570",
+    candidates: (b?.candidates && b.candidates.length > 0) ? b.candidates : (a?.candidates || []),
+    votes: mergedVotes,
+    votedStudentIds: mergedVoted,
+    lastUpdated: Math.max(a?.lastUpdated || 0, b?.lastUpdated || 0),
+    resetTimestamp: Math.max(resetTimeA, resetTimeB),
+  };
+}
 
 export async function fetchLiveElectionData(): Promise<{ success: boolean; data?: ElectionData; source: string }> {
-  // 1. Try local server API first
-  try {
-    const res = await fetch("/api/election", {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    const contentType = res.headers.get("content-type") || "";
-    if (res.ok && contentType.includes("application/json")) {
-      const data = await res.json();
-      if (data && data.candidates && data.votes) {
-        return { success: true, data, source: "server" };
+  // Fetch from server and cloud in parallel for maximum resilience
+  const [serverResult, cloudResult] = await Promise.allSettled([
+    (async () => {
+      const res = await fetch("/api/election", {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data && data.votes) return data as ElectionData;
       }
-    }
-  } catch {
-    // server API unavailable, fallback to cloud sync
-  }
+      throw new Error("Server not json");
+    })(),
+    (async () => {
+      // 1. Try Primary Cloud Relay
+      try {
+        const res = await fetch(CLOUD_PRIMARY_URL, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.payload) {
+            const parsed = JSON.parse(json.data.payload);
+            if (parsed && parsed.votes) return parsed as ElectionData;
+          }
+        }
+      } catch {}
 
-  // 2. Try Cloud Sync Relay (ensures cross-device sync even on Static hosting / Render Free sleep)
-  try {
-    const res = await fetch(CLOUD_SYNC_URL, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.candidates && data.votes) {
-        return { success: true, data, source: "cloud" };
+      // 2. Try Backup Cloud Relay
+      const resBackup = await fetch(CLOUD_BACKUP_URL, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (resBackup.ok) {
+        const jsonBackup = await resBackup.json();
+        if (jsonBackup?.data?.payload) {
+          const parsed = JSON.parse(jsonBackup.data.payload);
+          if (parsed && parsed.votes) return parsed as ElectionData;
+        }
       }
-    }
-  } catch {
-    // try backup cloud relay
-  }
+      throw new Error("Cloud not reachable");
+    })()
+  ]);
 
-  try {
-    const res = await fetch(BACKUP_SYNC_URL, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.candidates && data.votes) {
-        return { success: true, data, source: "cloud-backup" };
-      }
-    }
-  } catch {
-    // all remote fetches failed
+  const serverData = serverResult.status === "fulfilled" ? serverResult.value : null;
+  const cloudData = cloudResult.status === "fulfilled" ? cloudResult.value : null;
+
+  if (serverData && cloudData) {
+    const merged = mergeElectionData(serverData, cloudData);
+    return { success: true, data: merged, source: "merged" };
+  } else if (cloudData) {
+    return { success: true, data: cloudData, source: "cloud" };
+  } else if (serverData) {
+    return { success: true, data: serverData, source: "server" };
   }
 
   return { success: false, source: "none" };
 }
 
+async function updateCloudStore(url: string, payload: ElectionData): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "dbsurat_election_live",
+        data: {
+          payload: JSON.stringify(payload),
+        },
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function broadcastElectionData(data: ElectionData): Promise<boolean> {
-  const payload = {
+  const payload: ElectionData = {
     ...data,
     lastUpdated: Date.now(),
   };
 
-  let anySuccess = false;
-
-  // 1. Push to local server API
+  // Local BroadcastChannel for instant same-device sync
   try {
-    const res = await fetch("/api/admin/update-candidates", {
+    bc?.postMessage(payload);
+  } catch {}
+
+  // 1. Push to server API if available
+  try {
+    fetch("/api/admin/update-candidates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         candidates: payload.candidates,
         votes: payload.votes,
       }),
-    });
-    if (res.ok) anySuccess = true;
-  } catch {}
-
-  try {
-    await fetch("/api/admin/update-year", {
+    }).catch(() => {});
+    fetch("/api/admin/update-year", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ year: payload.year }),
-    });
+    }).catch(() => {});
   } catch {}
 
-  // 2. Push to Cloud Sync Relay
-  try {
-    const res = await fetch(CLOUD_SYNC_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) anySuccess = true;
-  } catch {}
+  // 2. Push to Primary & Backup Clouds simultaneously
+  const [p1, p2] = await Promise.allSettled([
+    updateCloudStore(CLOUD_PRIMARY_URL, payload),
+    updateCloudStore(CLOUD_BACKUP_URL, payload),
+  ]);
 
-  try {
-    await fetch(BACKUP_SYNC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {}
-
-  return anySuccess;
+  return (p1.status === "fulfilled" && p1.value) || (p2.status === "fulfilled" && p2.value);
 }
 
-export async function submitVoteLive(studentId: string, voterName: string, candidateNumber: number, currentData: ElectionData): Promise<ElectionData> {
+export async function submitVoteLive(
+  studentId: string,
+  voterName: string,
+  candidateNumber: number,
+  currentData: ElectionData
+): Promise<ElectionData> {
   const num = Number(candidateNumber);
-  const updatedVotes = {
-    ...currentData.votes,
-    [num]: (currentData.votes[num] || 0) + 1,
-  };
-  const updatedVotedIds = [...(currentData.votedStudentIds || []), String(studentId).trim()];
+  const cleanId = String(studentId).trim();
+
+  // 1. Fetch latest state from cloud/server first to ensure we add to the newest tally
+  let baseData = currentData;
+  try {
+    const live = await fetchLiveElectionData();
+    if (live.success && live.data && live.data.votes) {
+      baseData = mergeElectionData(currentData, live.data);
+    }
+  } catch {}
+
+  // 2. Calculate incremented votes
+  const updatedVotes: Record<number, number> = { ...(baseData.votes || {}) };
+  updatedVotes[num] = (updatedVotes[num] || 0) + 1;
+
+  const existingVoted = Array.isArray(baseData.votedStudentIds) ? baseData.votedStudentIds : [];
+  const updatedVotedIds = Array.from(new Set([...existingVoted, cleanId]));
 
   const updatedData: ElectionData = {
-    ...currentData,
+    year: baseData.year || currentData.year,
+    candidates: baseData.candidates?.length ? baseData.candidates : currentData.candidates,
     votes: updatedVotes,
     votedStudentIds: updatedVotedIds,
     lastUpdated: Date.now(),
+    resetTimestamp: baseData.resetTimestamp,
   };
 
-  // Broadcast to both Server and Cloud
-  // 1. Server API
+  // 3. Post to local server if available
   try {
-    await fetch("/api/vote", {
+    fetch("/api/vote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        studentId,
+        studentId: cleanId,
         voterName,
         candidateNumber: num,
       }),
-    });
+    }).catch(() => {});
   } catch {}
 
-  // 2. Cloud Relay
-  try {
-    await fetch(CLOUD_SYNC_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedData),
-    });
-  } catch {}
-
-  try {
-    await fetch(BACKUP_SYNC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedData),
-    });
-  } catch {}
+  // 4. Broadcast to all clouds & broadcast channels
+  await broadcastElectionData(updatedData);
 
   return updatedData;
 }

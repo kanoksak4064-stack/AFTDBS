@@ -154,15 +154,56 @@ function saveStore() {
     broadcastUpdate();
 
     // Async sync to cloud storage relay
-    fetch("https://api.jsonstorage.net/v1/json/87cb06bb-14b0-42c6-a2ec-5e352f75863e", {
+    const cloudPayload = JSON.stringify({
+      name: "dbsurat_election_live",
+      data: {
+        payload: JSON.stringify(currentStore),
+      },
+    });
+    fetch("https://api.restful-api.dev/objects/ff808181a061cdc401a062c8b32204a6", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(currentStore),
+      body: cloudPayload,
+    }).catch(() => {});
+    fetch("https://api.restful-api.dev/objects/ff808181a061cdc401a062cae18f04ac", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: cloudPayload,
     }).catch(() => {});
   } catch (err) {
     console.error("Error writing election store:", err);
   }
 }
+
+// Initial and periodic sync from cloud to keep server in sync with all external devices
+async function syncFromCloud() {
+  try {
+    const res = await fetch("https://api.restful-api.dev/objects/ff808181a061cdc401a062c8b32204a6");
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.data?.payload) {
+        const cloudData = JSON.parse(json.data.payload);
+        if (cloudData && cloudData.votes) {
+          const totalLocalVotes = Object.values(currentStore.votes).reduce((a, b) => a + b, 0);
+          const totalCloudVotes = Object.values(cloudData.votes as Record<number, number>).reduce((a, b) => a + b, 0);
+          if (totalCloudVotes > totalLocalVotes) {
+            currentStore.votes = cloudData.votes;
+            if (cloudData.year) currentStore.year = cloudData.year;
+            if (cloudData.candidates?.length) currentStore.candidates = cloudData.candidates;
+            if (cloudData.votedStudentIds) currentStore.votedStudentIds = cloudData.votedStudentIds;
+            currentStore.lastUpdated = cloudData.lastUpdated || Date.now();
+            saveStore();
+            broadcastUpdate();
+            console.log("Synced latest votes from cloud relay:", cloudData.votes);
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
+syncFromCloud();
+setInterval(syncFromCloud, 2500);
 
 // ── Real-Time SSE Stream Route ──
 app.get("/api/election/stream", (req, res) => {
