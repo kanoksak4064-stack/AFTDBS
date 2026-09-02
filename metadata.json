@@ -1,0 +1,8 @@
+{
+  "name": "DBSurat Vocational Election",
+  "description": "Vocational student organization election system",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
