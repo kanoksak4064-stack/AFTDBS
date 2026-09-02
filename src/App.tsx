@@ -100,6 +100,31 @@ export default function ElectionApp() {
   });
 
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
+  const [votedIds, setVotedIds] = useState<string[]>([]);
+
+  // Sync with server in real-time
+  const fetchServerData = async () => {
+    try {
+      const res = await fetch("/api/election");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.year) setYear(data.year);
+        if (data.candidates && Array.isArray(data.candidates)) setCandidateList(data.candidates);
+        if (data.votes) setVotes(data.votes);
+        if (data.votedStudentIds && Array.isArray(data.votedStudentIds)) {
+          setVotedIds(data.votedStudentIds);
+        }
+      }
+    } catch {
+      // offline fallback to localStorage
+    }
+  };
+
+  useEffect(() => {
+    fetchServerData();
+    const interval = setInterval(fetchServerData, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Sync state changes to localStorage
   useEffect(() => {
@@ -187,16 +212,41 @@ export default function ElectionApp() {
     }
 
     if (valid) {
+      const cleanId = loginId.trim();
+      localStorage.setItem("election_student_id", cleanId);
       setVoterName(loginName.trim());
       setStep("home");
     }
   };
 
-  const confirmVote = () => {
+  const confirmVote = async () => {
     if (selected !== null) {
-      setVotes((prev) => ({ ...prev, [selected]: (prev[selected] || 0) + 1 }));
+      const candidateToVote = selected;
+      const cleanId = loginId.trim() || localStorage.getItem("election_student_id") || `voter-${Date.now()}`;
+
+      // Optimistic update
+      setVotes((prev) => ({ ...prev, [candidateToVote]: (prev[candidateToVote] || 0) + 1 }));
       setHasVoted(true);
       setStep("result");
+
+      try {
+        const res = await fetch("/api/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: cleanId,
+            voterName: voterName || loginName.trim(),
+            candidateNumber: candidateToVote,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.votes) setVotes(data.votes);
+          if (data.votedStudentIds) setVotedIds(data.votedStudentIds);
+        }
+      } catch (err) {
+        console.error("Failed to submit vote to server:", err);
+      }
     }
   };
 
@@ -204,10 +254,6 @@ export default function ElectionApp() {
     totalVotes === 0 ? 0 : Math.round(((votes[num] || 0) / totalVotes) * 100);
 
   const navTo = (s: string) => {
-    if (s === "vote" && hasVoted) {
-      setStep("result");
-      return;
-    }
     setStep(s);
     if (s === "vote") {
       setSelected(null);
@@ -347,6 +393,20 @@ export default function ElectionApp() {
                     boxShadow: "0 4px 14px rgba(123,28,28,0.3)",
                   }}>
                     เข้าสู่ระบบเลือกตั้ง →
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStep("result")}
+                    style={{
+                      width: "100%", padding: "13px", borderRadius: 12,
+                      border: "2px solid #7B1C1C", background: "white", color: "#7B1C1C",
+                      fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                      marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    📊 ดูผลคะแนนการเลือกตั้ง (Live Results)
                   </button>
 
                   <p style={{ textAlign: "center", color: "#94A3B8", fontSize: 12, marginTop: 14, marginBottom: 0 }}>
@@ -852,6 +912,55 @@ export default function ElectionApp() {
                 ยังไม่มีคะแนน — รอผลการลงคะแนน
               </div>
             )}
+
+            {/* Action buttons at bottom of results */}
+            <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelected(null);
+                  setStep("vote");
+                }}
+                style={{
+                  flex: "1 1 180px", padding: "13px 18px", borderRadius: 12, border: "none",
+                  background: "#7B1C1C", color: "white", fontSize: 15, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(123,28,28,0.25)"
+                }}
+              >
+                🗳️ ลงคะแนนเสียงเลือกตั้ง
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep("home")}
+                style={{
+                  flex: "1 1 140px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
+                  background: "white", color: "#374151", fontSize: 15, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 8
+                }}
+              >
+                🏠 หน้าแรก
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginName("");
+                  setLoginId("");
+                  setStep("login");
+                }}
+                style={{
+                  flex: "1 1 140px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
+                  background: "white", color: "#64748B", fontSize: 14, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 8
+                }}
+              >
+                🚪 หน้าเข้าสู่ระบบ
+              </button>
+            </div>
           </div>
         )}
 
@@ -900,7 +1009,16 @@ export default function ElectionApp() {
                     />
                     <button
                       type="button"
-                      onClick={() => alert("อัปเดต ปีการศึกษา เรียบร้อยแล้ว!")}
+                      onClick={async () => {
+                        try {
+                          await fetch("/api/admin/update-year", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ year }),
+                          });
+                        } catch {}
+                        alert("อัปเดต ปีการศึกษา เรียบร้อยแล้ว!");
+                      }}
                       style={{
                         padding: "11px 20px", borderRadius: 8, border: "none",
                         background: "#7B1C1C", color: "white", fontWeight: "bold", cursor: "pointer",
@@ -1124,8 +1242,18 @@ export default function ElectionApp() {
                       image: newCamImage || undefined
                     };
 
-                    setCandidateList(prev => [...prev, newCandidateObj]);
-                    setVotes(prev => ({ ...prev, [nextNum]: 0 }));
+                    const updatedCandidates = [...candidateList, newCandidateObj];
+                    const updatedVotes = { ...votes, [nextNum]: 0 };
+                    setCandidateList(updatedCandidates);
+                    setVotes(updatedVotes);
+
+                    try {
+                      fetch("/api/admin/update-candidates", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ candidates: updatedCandidates, votes: updatedVotes }),
+                      });
+                    } catch {}
 
                     // Reset form states
                     setNewCamName("");
@@ -1341,7 +1469,7 @@ export default function ElectionApp() {
                                   .map(p => p.trim())
                                   .filter(p => p !== "");
 
-                                setCandidateList(prev => prev.map(cand => {
+                                const updatedList = candidateList.map(cand => {
                                   if (cand.number === c.number) {
                                     return {
                                       ...cand,
@@ -1355,7 +1483,15 @@ export default function ElectionApp() {
                                     };
                                   }
                                   return cand;
-                                }));
+                                });
+                                setCandidateList(updatedList);
+                                try {
+                                  fetch("/api/admin/update-candidates", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ candidates: updatedList, votes }),
+                                  });
+                                } catch {}
                                 setEditingCandidateNum(null);
                                 alert(`แก้ไขข้อมูลผู้สมัคร เบอร์ ${c.number} เรียบร้อยแล้ว!`);
                               }}
@@ -1427,6 +1563,13 @@ export default function ElectionApp() {
                                   ...prev,
                                   [c.number]: Math.max(0, (prev[c.number] || 0) - 1)
                                 }));
+                                try {
+                                  fetch("/api/admin/adjust-vote", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ candidateNumber: c.number, delta: -1 }),
+                                  });
+                                } catch {}
                               }}
                               style={{
                                 width: 28, height: 28, borderRadius: "50%", border: "1px solid #CBD5E1",
@@ -1446,6 +1589,13 @@ export default function ElectionApp() {
                                   ...prev,
                                   [c.number]: (prev[c.number] || 0) + 1
                                 }));
+                                try {
+                                  fetch("/api/admin/adjust-vote", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ candidateNumber: c.number, delta: 1 }),
+                                  });
+                                } catch {}
                               }}
                               style={{
                                 width: 28, height: 28, borderRadius: "50%", border: "1px solid #CBD5E1",
@@ -1483,10 +1633,18 @@ export default function ElectionApp() {
                             type="button"
                             onClick={() => {
                               if (confirm(`คุณแน่ใจหรือไม่ที่จะลบ "เบอร์ ${c.number}: ${c.name}" ออกจากระบบ?`)) {
-                                setCandidateList(prev => prev.filter(cand => cand.number !== c.number));
+                                const updatedCandidates = candidateList.filter(cand => cand.number !== c.number);
                                 const newVotes = { ...votes };
                                 delete newVotes[c.number];
+                                setCandidateList(updatedCandidates);
                                 setVotes(newVotes);
+                                try {
+                                  fetch("/api/admin/update-candidates", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ candidates: updatedCandidates, votes: newVotes }),
+                                  });
+                                } catch {}
                               }
                             }}
                             style={{
@@ -1513,13 +1671,16 @@ export default function ElectionApp() {
                 <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm("คุณแน่ใจหรือไม่ที่จะรีเซ็ตคะแนนโหวตทั้งหมดกลับไปเป็น 0?")) {
                         const resetVotes: Record<number, number> = {};
                         candidateList.forEach(c => {
                           resetVotes[c.number] = 0;
                         });
                         setVotes(resetVotes);
+                        try {
+                          await fetch("/api/admin/reset-votes", { method: "POST" });
+                        } catch {}
                         alert("รีเซ็ตคะแนนโหวตทั้งหมดเป็น 0 เรียบร้อยแล้ว!");
                       }
                     }}
@@ -1533,10 +1694,14 @@ export default function ElectionApp() {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm("กรุณายืนยันการล้างประวัติการโหวตของผู้ใช้งานทุกคน (เพื่อให้สามารถเริ่มลงคะแนนใหม่ได้)?")) {
                         setHasVoted(false);
                         localStorage.removeItem("election_has_voted");
+                        localStorage.removeItem("election_student_id");
+                        try {
+                          await fetch("/api/admin/clear-voted-status", { method: "POST" });
+                        } catch {}
                         alert("ล้างประวัติการลงคะแนนเรียบร้อยแล้ว! ทุกท่านสามารถเข้ามาลงคะแนนใหม่ได้");
                       }
                     }}
@@ -1550,7 +1715,7 @@ export default function ElectionApp() {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm("กรุณายืนยันการตั้งค่าผู้สมัครทั้งหมดกลับไปเป็นค่าเริ่มต้นจากวิทยาลัย?")) {
                         setCandidateList(initialCandidates);
                         const rVotes: Record<number, number> = {};
@@ -1560,8 +1725,12 @@ export default function ElectionApp() {
                         setVotes(rVotes);
                         setHasVoted(false);
                         localStorage.removeItem("election_has_voted");
+                        localStorage.removeItem("election_student_id");
                         localStorage.removeItem("election_candidates");
                         localStorage.removeItem("election_votes");
+                        try {
+                          await fetch("/api/admin/reset-all-default", { method: "POST" });
+                        } catch {}
                         alert("รีเซ็ตรายชื่อผู้สมัครและคะแนนโหวตเป็นค่าเริ่มต้นเรียบร้อยแล้ว!");
                       }
                     }}
