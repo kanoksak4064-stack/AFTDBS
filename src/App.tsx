@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { fetchLiveElectionData, broadcastElectionData, submitVoteLive } from "./services/electionSync";
 
 const LOGO = "data:image/png;base64,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";
 
@@ -100,7 +101,7 @@ export default function ElectionApp() {
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
 
-  // Sync with server in real-time
+  // Sync with server/cloud in real-time
   const applyServerData = (data: any) => {
     if (!data) return;
     if (data.year) setYear(data.year);
@@ -113,11 +114,12 @@ export default function ElectionApp() {
 
   const fetchServerData = async () => {
     try {
-      const res = await fetch("/api/election", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        applyServerData(data);
+      const res = await fetchLiveElectionData();
+      if (res.success && res.data) {
+        applyServerData(res.data);
         setIsLiveConnected(true);
+      } else {
+        setIsLiveConnected(false);
       }
     } catch {
       setIsLiveConnected(false);
@@ -285,22 +287,25 @@ export default function ElectionApp() {
       setStep("result");
 
       try {
-        const res = await fetch("/api/vote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            studentId: cleanId,
-            voterName: voterName || loginName.trim(),
-            candidateNumber: candidateToVote,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.votes) setVotes(data.votes);
-          if (data.votedStudentIds) setVotedIds(data.votedStudentIds);
+        const updated = await submitVoteLive(
+          cleanId,
+          voterName || loginName.trim(),
+          candidateToVote,
+          {
+            year,
+            candidates: candidateList,
+            votes,
+            votedStudentIds: votedIds,
+            lastUpdated: Date.now(),
+          }
+        );
+        if (updated) {
+          setVotes(updated.votes);
+          setVotedIds(updated.votedStudentIds);
+          setIsLiveConnected(true);
         }
       } catch (err) {
-        console.error("Failed to submit vote to server:", err);
+        console.error("Failed to submit vote:", err);
       }
     }
   };
@@ -994,19 +999,35 @@ export default function ElectionApp() {
                 <div style={{ color: "#64748B", fontSize: 13 }}>คะแนนรวมทั้งหมด</div>
                 <div style={{ fontWeight: 800, fontSize: 22, color: "#0F172A" }}>{totalVotes} เสียง</div>
               </div>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: isLiveConnected ? "#DCFCE7" : "#FEF3C7",
-                color: isLiveConnected ? "#15803D" : "#B45309",
-                borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 700,
-              }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: isLiveConnected ? "#22C55E" : "#F59E0B",
-                  display: "inline-block",
-                  boxShadow: isLiveConnected ? "0 0 6px #22C55E" : "none",
-                }} />
-                {isLiveConnected ? "ระบบซิงค์สดเรียลไทม์ (Live Sync)" : "กำลังเชื่อมต่อส่วนกลาง..."}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  background: isLiveConnected ? "#DCFCE7" : "#FEF3C7",
+                  color: isLiveConnected ? "#15803D" : "#B45309",
+                  borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: 700,
+                }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: isLiveConnected ? "#22C55E" : "#F59E0B",
+                    display: "inline-block",
+                    boxShadow: isLiveConnected ? "0 0 6px #22C55E" : "none",
+                  }} />
+                  {isLiveConnected ? "ซิงค์สดทุกเครื่อง (Live Sync)" : "กำลังซิงค์ข้อมูล..."}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchServerData();
+                  }}
+                  title="กดเพื่อดึงคะแนนสดล่าสุดทันที"
+                  style={{
+                    border: "1px solid #CBD5E1", background: "#F8FAFC", borderRadius: 8,
+                    padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#475569",
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 4
+                  }}
+                >
+                  🔄 ดึงคะแนนสด
+                </button>
               </div>
             </div>
 
@@ -1176,13 +1197,13 @@ export default function ElectionApp() {
                     <button
                       type="button"
                       onClick={async () => {
-                        try {
-                          await fetch("/api/admin/update-year", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ year }),
-                          });
-                        } catch {}
+                        broadcastElectionData({
+                          year,
+                          candidates: candidateList,
+                          votes,
+                          votedStudentIds: votedIds,
+                          lastUpdated: Date.now(),
+                        });
                         alert("อัปเดต ปีการศึกษา เรียบร้อยแล้ว!");
                       }}
                       style={{
@@ -1413,13 +1434,13 @@ export default function ElectionApp() {
                     setCandidateList(updatedCandidates);
                     setVotes(updatedVotes);
 
-                    try {
-                      fetch("/api/admin/update-candidates", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ candidates: updatedCandidates, votes: updatedVotes }),
-                      });
-                    } catch {}
+                    broadcastElectionData({
+                      year,
+                      candidates: updatedCandidates,
+                      votes: updatedVotes,
+                      votedStudentIds: votedIds,
+                      lastUpdated: Date.now(),
+                    });
 
                     // Reset form states
                     setNewCamName("");
@@ -1651,13 +1672,13 @@ export default function ElectionApp() {
                                   return cand;
                                 });
                                 setCandidateList(updatedList);
-                                try {
-                                  fetch("/api/admin/update-candidates", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ candidates: updatedList, votes }),
-                                  });
-                                } catch {}
+                                broadcastElectionData({
+                                  year,
+                                  candidates: updatedList,
+                                  votes,
+                                  votedStudentIds: votedIds,
+                                  lastUpdated: Date.now(),
+                                });
                                 setEditingCandidateNum(null);
                                 alert(`แก้ไขข้อมูลผู้สมัคร เบอร์ ${c.number} เรียบร้อยแล้ว!`);
                               }}
@@ -1725,17 +1746,18 @@ export default function ElectionApp() {
                             <button
                               type="button"
                               onClick={() => {
-                                setVotes(prev => ({
-                                  ...prev,
-                                  [c.number]: Math.max(0, (prev[c.number] || 0) - 1)
-                                }));
-                                try {
-                                  fetch("/api/admin/adjust-vote", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ candidateNumber: c.number, delta: -1 }),
-                                  });
-                                } catch {}
+                                const newVotes = {
+                                  ...votes,
+                                  [c.number]: Math.max(0, (votes[c.number] || 0) - 1)
+                                };
+                                setVotes(newVotes);
+                                broadcastElectionData({
+                                  year,
+                                  candidates: candidateList,
+                                  votes: newVotes,
+                                  votedStudentIds: votedIds,
+                                  lastUpdated: Date.now(),
+                                });
                               }}
                               style={{
                                 width: 28, height: 28, borderRadius: "50%", border: "1px solid #CBD5E1",
@@ -1751,17 +1773,18 @@ export default function ElectionApp() {
                             <button
                               type="button"
                               onClick={() => {
-                                setVotes(prev => ({
-                                  ...prev,
-                                  [c.number]: (prev[c.number] || 0) + 1
-                                }));
-                                try {
-                                  fetch("/api/admin/adjust-vote", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ candidateNumber: c.number, delta: 1 }),
-                                  });
-                                } catch {}
+                                const newVotes = {
+                                  ...votes,
+                                  [c.number]: (votes[c.number] || 0) + 1
+                                };
+                                setVotes(newVotes);
+                                broadcastElectionData({
+                                  year,
+                                  candidates: candidateList,
+                                  votes: newVotes,
+                                  votedStudentIds: votedIds,
+                                  lastUpdated: Date.now(),
+                                });
                               }}
                               style={{
                                 width: 28, height: 28, borderRadius: "50%", border: "1px solid #CBD5E1",
@@ -1804,13 +1827,13 @@ export default function ElectionApp() {
                                 delete newVotes[c.number];
                                 setCandidateList(updatedCandidates);
                                 setVotes(newVotes);
-                                try {
-                                  fetch("/api/admin/update-candidates", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ candidates: updatedCandidates, votes: newVotes }),
-                                  });
-                                } catch {}
+                                broadcastElectionData({
+                                  year,
+                                  candidates: updatedCandidates,
+                                  votes: newVotes,
+                                  votedStudentIds: votedIds,
+                                  lastUpdated: Date.now(),
+                                });
                               }
                             }}
                             style={{
@@ -1844,9 +1867,13 @@ export default function ElectionApp() {
                           resetVotes[c.number] = 0;
                         });
                         setVotes(resetVotes);
-                        try {
-                          await fetch("/api/admin/reset-votes", { method: "POST" });
-                        } catch {}
+                        broadcastElectionData({
+                          year,
+                          candidates: candidateList,
+                          votes: resetVotes,
+                          votedStudentIds: votedIds,
+                          lastUpdated: Date.now(),
+                        });
                         alert("รีเซ็ตคะแนนโหวตทั้งหมดเป็น 0 เรียบร้อยแล้ว!");
                       }
                     }}
