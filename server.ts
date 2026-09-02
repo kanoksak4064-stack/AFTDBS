@@ -8,6 +8,14 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(express.json({ limit: "20mb" }));
 
+// Enable CORS for cross-device support
+app.use((_req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  next();
+});
+
 // File storage path for persistent votes & candidates
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "election_store.json");
@@ -115,6 +123,27 @@ function loadStore(): ElectionStore {
 
 let currentStore: ElectionStore = loadStore();
 
+// Track active SSE client connections for zero-latency live updates
+const sseClients: Set<express.Response> = new Set();
+
+function broadcastUpdate() {
+  const payload = JSON.stringify({
+    year: currentStore.year,
+    candidates: currentStore.candidates,
+    votes: currentStore.votes,
+    votedStudentIds: currentStore.votedStudentIds,
+    lastUpdated: currentStore.lastUpdated,
+  });
+
+  for (const client of sseClients) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
 function saveStore() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -122,10 +151,47 @@ function saveStore() {
     }
     currentStore.lastUpdated = Date.now();
     fs.writeFileSync(DATA_FILE, JSON.stringify(currentStore, null, 2), "utf-8");
+    broadcastUpdate();
   } catch (err) {
     console.error("Error writing election store:", err);
   }
 }
+
+// ── Real-Time SSE Stream Route ──
+app.get("/api/election/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  // Send current data immediately on connection
+  const initialPayload = JSON.stringify({
+    year: currentStore.year,
+    candidates: currentStore.candidates,
+    votes: currentStore.votes,
+    votedStudentIds: currentStore.votedStudentIds,
+    lastUpdated: currentStore.lastUpdated,
+  });
+  res.write(`data: ${initialPayload}\n\n`);
+
+  sseClients.add(res);
+
+  // Keep-alive heartbeat every 15 seconds
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(": heartbeat\n\n");
+    } catch {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    }
+  }, 15000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+});
 
 // ── API Routes ──
 app.get("/api/election", (_req, res) => {

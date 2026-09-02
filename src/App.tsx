@@ -94,36 +94,80 @@ export default function ElectionApp() {
     return { 1: 0, 2: 0, 3: 0, 4: 0 };
   });
 
-  const [hasVoted, setHasVoted] = useState<boolean>(() => {
-    const saved = localStorage.getItem("election_has_voted");
-    return saved === "true";
-  });
+  const [hasVoted, setHasVoted] = useState<boolean>(false);
 
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
   const [votedIds, setVotedIds] = useState<string[]>([]);
+  const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
 
   // Sync with server in real-time
+  const applyServerData = (data: any) => {
+    if (!data) return;
+    if (data.year) setYear(data.year);
+    if (data.candidates && Array.isArray(data.candidates)) setCandidateList(data.candidates);
+    if (data.votes && typeof data.votes === "object") setVotes(data.votes);
+    if (data.votedStudentIds && Array.isArray(data.votedStudentIds)) {
+      setVotedIds(data.votedStudentIds);
+    }
+  };
+
   const fetchServerData = async () => {
     try {
-      const res = await fetch("/api/election");
+      const res = await fetch("/api/election", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (data.year) setYear(data.year);
-        if (data.candidates && Array.isArray(data.candidates)) setCandidateList(data.candidates);
-        if (data.votes) setVotes(data.votes);
-        if (data.votedStudentIds && Array.isArray(data.votedStudentIds)) {
-          setVotedIds(data.votedStudentIds);
-        }
+        applyServerData(data);
+        setIsLiveConnected(true);
       }
     } catch {
-      // offline fallback to localStorage
+      setIsLiveConnected(false);
     }
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchServerData();
-    const interval = setInterval(fetchServerData, 2000);
-    return () => clearInterval(interval);
+
+    // 1. Establish zero-latency Server-Sent Events (SSE) stream
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/election/stream");
+      eventSource.onopen = () => {
+        setIsLiveConnected(true);
+      };
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          applyServerData(data);
+          setIsLiveConnected(true);
+        } catch (e) {
+          console.error("Error parsing live stream data", e);
+        }
+      };
+      eventSource.onerror = () => {
+        // Fallback to polling if SSE is disconnected
+        setIsLiveConnected(false);
+      };
+    } catch (err) {
+      console.warn("SSE not supported, falling back to interval polling", err);
+    }
+
+    // 2. High-reliability Polling (1.5s interval)
+    const interval = setInterval(fetchServerData, 1500);
+
+    // 3. Instant sync on tab focus or screen unlock
+    const handleFocusOrVisible = () => {
+      fetchServerData();
+    };
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+    };
   }, []);
 
   // Sync state changes to localStorage
@@ -219,6 +263,17 @@ export default function ElectionApp() {
     }
   };
 
+  const handleNextVoter = () => {
+    setLoginName("");
+    setLoginId("");
+    setLoginNameErr("");
+    setLoginIdErr("");
+    setVoterName("");
+    setSelected(null);
+    setHasVoted(false);
+    setStep("login");
+  };
+
   const confirmVote = async () => {
     if (selected !== null) {
       const candidateToVote = selected;
@@ -278,23 +333,40 @@ export default function ElectionApp() {
             <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2, fontWeight: 500 }}>{SCHOOL_NAME} · {year}</div>
           </div>
         </div>
-        {(step !== "login" || isAdmin) && (
-          <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-            {[
-              ["home", "หน้าแรก"],
-              ["vote", "ลงคะแนน"],
-              ["result", "ผลคะแนน"],
-              ...(isAdmin ? [["admin", "ผู้ดูแลระบบ"]] : [])
-            ].map(([s, label]) => (
-              <button key={s} onClick={() => navTo(s)} style={{
-                padding: "6px 11px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12,
-                background: step === s ? "#F5C518" : "rgba(255,255,255,0.15)",
-                color: step === s ? "#7B1C1C" : "white",
-                fontFamily: "inherit", fontWeight: 700, transition: "background 0.2s",
-              }}>{label}</button>
-            ))}
-          </div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {(step !== "login" || isAdmin) && (
+            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              {[
+                ["home", "หน้าแรก"],
+                ["vote", "ลงคะแนน"],
+                ["result", "ผลคะแนน"],
+                ...(isAdmin ? [["admin", "ผู้ดูแลระบบ"]] : [])
+              ].map(([s, label]) => (
+                <button key={s} onClick={() => navTo(s)} style={{
+                  padding: "6px 11px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12,
+                  background: step === s ? "#F5C518" : "rgba(255,255,255,0.15)",
+                  color: step === s ? "#7B1C1C" : "white",
+                  fontFamily: "inherit", fontWeight: 700, transition: "background 0.2s",
+                }}>{label}</button>
+              ))}
+            </div>
+          )}
+
+          {step !== "login" && (
+            <button
+              onClick={handleNextVoter}
+              title="รีเซ็ตฟอร์มสำหรับผู้มีสิทธิ์คนถัดไปที่เครื่องกลาง"
+              style={{
+                padding: "6px 12px", borderRadius: 20, border: "1px solid rgba(254,240,138,0.6)",
+                cursor: "pointer", fontSize: 12, background: "rgba(0,0,0,0.25)", color: "#FEF08A",
+                fontFamily: "inherit", fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
+                transition: "all 0.2s"
+              }}
+            >
+              👥 ผู้ลงคะแนนคนถัดไป
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -550,17 +622,34 @@ export default function ElectionApp() {
                 borderRadius: 20, padding: "2px 14px", fontSize: 12, fontWeight: 800, marginBottom: 18,
               }}>{year}</div>
               {voterName && (
-                <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 16 }}>
-                  ยินดีต้อนรับ, <strong>{voterName}</strong> 👋
+                <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span>ยินดีต้อนรับ, <strong>{voterName}</strong> 👋</span>
+                  <button
+                    onClick={handleNextVoter}
+                    style={{
+                      background: "rgba(255,255,255,0.2)", border: "none", color: "white",
+                      borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 700,
+                      cursor: "pointer", fontFamily: "inherit"
+                    }}
+                  >
+                    (เปลี่ยนผู้ลงคะแนน)
+                  </button>
                 </div>
               )}
-              <div>
+              <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
                 <button onClick={() => navTo("vote")} style={{
                   background: "#F5C518", color: "#7B1C1C", border: "none",
                   borderRadius: 12, padding: "11px 32px", fontSize: 15, fontWeight: 800,
                   cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(245,197,24,0.4)",
                 }}>
                   🗳️ เริ่มลงคะแนนเสียง
+                </button>
+                <button onClick={handleNextVoter} style={{
+                  background: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: 12, padding: "11px 20px", fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "inherit"
+                }}>
+                  👥 ผู้มีสิทธิ์คนถัดไป
                 </button>
               </div>
             </div>
@@ -631,18 +720,39 @@ export default function ElectionApp() {
           <div>
             {hasVoted ? (
               <div style={{
-                background: "white", borderRadius: 20, padding: 36, textAlign: "center",
-                boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+                background: "white", borderRadius: 20, padding: "36px 24px", textAlign: "center",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.08)", maxWidth: 480, margin: "0 auto",
               }}>
+                <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+                <h2 style={{ color: "#16A34A", margin: "0 0 8px", fontSize: 22, fontWeight: 800 }}>บันทึกคะแนนของคุณเรียบร้อยแล้ว</h2>
+                <p style={{ color: "#64748B", fontSize: 14, margin: "0 0 24px" }}>ขอบคุณที่มีส่วนร่วมในการเลือกตั้งนายก อวท.</p>
 
-                <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
-                <h2 style={{ color: "#16A34A", margin: "0 0 8px", fontSize: 22 }}>คุณได้ลงคะแนนแล้ว</h2>
-                <p style={{ color: "#6B7280", fontSize: 14 }}>ขอบคุณที่มีส่วนร่วมในการเลือกตั้งครั้งนี้</p>
-                <button onClick={() => navTo("result")} style={{
-                  marginTop: 20, background: "#7B1C1C", color: "white", border: "none",
-                  borderRadius: 12, padding: "11px 28px", fontSize: 15, fontWeight: 700,
-                  cursor: "pointer", fontFamily: "inherit",
-                }}>ดูผลคะแนน →</button>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <button onClick={handleNextVoter} style={{
+                    width: "100%", padding: "14px", borderRadius: 12, border: "none",
+                    background: "#7B1C1C", color: "white", fontSize: 16, fontWeight: 800,
+                    cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                    justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(123,28,28,0.3)"
+                  }}>
+                    👥 ผู้ลงคะแนนคนถัดไป (เริ่มลงทะเบียนคนใหม่) →
+                  </button>
+
+                  <button onClick={() => { setHasVoted(false); setSelected(null); }} style={{
+                    width: "100%", padding: "12px", borderRadius: 12, border: "2px solid #E2E8F0",
+                    background: "white", color: "#374151", fontSize: 14, fontWeight: 700,
+                    cursor: "pointer", fontFamily: "inherit"
+                  }}>
+                    🗳️ ลงคะแนนเสียงอีกครั้ง
+                  </button>
+
+                  <button onClick={() => navTo("result")} style={{
+                    width: "100%", padding: "12px", borderRadius: 12, border: "2px solid #E2E8F0",
+                    background: "#F8FAFC", color: "#64748B", fontSize: 14, fontWeight: 700,
+                    cursor: "pointer", fontFamily: "inherit"
+                  }}>
+                    📊 ดูผลคะแนนสด
+                  </button>
+                </div>
               </div>
             ) : (
               <div>
@@ -820,6 +930,36 @@ export default function ElectionApp() {
         {/* ── RESULT ── */}
         {step === "result" && (
           <div>
+            {/* Kiosk Mode Notice & Quick Next Voter Action */}
+            <div style={{
+              background: "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
+              borderRadius: 16, padding: "16px 20px", color: "white", marginBottom: 18,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.15)", display: "flex",
+              justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12
+            }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "#FEF08A", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>🗳️</span> สำหรับเครื่องลงคะแนนกลาง (Kiosk Booth)
+                </div>
+                <div style={{ fontSize: 13, color: "#CBD5E1", marginTop: 2 }}>
+                  สามารถกดปุ่มเพื่อเริ่มให้ผู้มีสิทธิ์คนถัดไปเข้าสู่ระบบลงคะแนนได้ทันที
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={handleNextVoter}
+                  style={{
+                    padding: "10px 18px", borderRadius: 10, border: "none",
+                    background: "#F5C518", color: "#7B1C1C", fontWeight: 800, fontSize: 14,
+                    cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(245,197,24,0.3)",
+                    display: "flex", alignItems: "center", gap: 6
+                  }}
+                >
+                  👥 ผู้มีสิทธิ์คนถัดไป →
+                </button>
+              </div>
+            </div>
+
             {totalVotes > 0 && winnerCandidate && (
               <div style={{
                 background: `linear-gradient(135deg, ${winnerCandidate.color} 0%, ${winnerCandidate.color}BB 100%)`,
@@ -848,10 +988,26 @@ export default function ElectionApp() {
             <div style={{
               background: "white", borderRadius: 14, padding: "14px 18px", marginBottom: 16,
               boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
+              display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
             }}>
-              <div style={{ color: "#64748B", fontSize: 14 }}>คะแนนรวมทั้งหมด</div>
-              <div style={{ fontWeight: 800, fontSize: 22, color: "#0F172A" }}>{totalVotes} เสียง</div>
+              <div>
+                <div style={{ color: "#64748B", fontSize: 13 }}>คะแนนรวมทั้งหมด</div>
+                <div style={{ fontWeight: 800, fontSize: 22, color: "#0F172A" }}>{totalVotes} เสียง</div>
+              </div>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: isLiveConnected ? "#DCFCE7" : "#FEF3C7",
+                color: isLiveConnected ? "#15803D" : "#B45309",
+                borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 700,
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: isLiveConnected ? "#22C55E" : "#F59E0B",
+                  display: "inline-block",
+                  boxShadow: isLiveConnected ? "0 0 6px #22C55E" : "none",
+                }} />
+                {isLiveConnected ? "ระบบซิงค์สดเรียลไทม์ (Live Sync)" : "กำลังเชื่อมต่อส่วนกลาง..."}
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -917,26 +1073,40 @@ export default function ElectionApp() {
             <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
               <button
                 type="button"
-                onClick={() => {
-                  setSelected(null);
-                  setStep("vote");
-                }}
+                onClick={handleNextVoter}
                 style={{
-                  flex: "1 1 180px", padding: "13px 18px", borderRadius: 12, border: "none",
-                  background: "#7B1C1C", color: "white", fontSize: 15, fontWeight: 700,
+                  flex: "1 1 200px", padding: "13px 18px", borderRadius: 12, border: "none",
+                  background: "#7B1C1C", color: "white", fontSize: 15, fontWeight: 800,
                   cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
                   justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(123,28,28,0.25)"
                 }}
               >
-                🗳️ ลงคะแนนเสียงเลือกตั้ง
+                👥 ผู้ลงคะแนนคนถัดไป (เริ่มคนใหม่)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelected(null);
+                  setHasVoted(false);
+                  setStep("vote");
+                }}
+                style={{
+                  flex: "1 1 150px", padding: "13px 18px", borderRadius: 12, border: "2px solid #7B1C1C",
+                  background: "white", color: "#7B1C1C", fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 8
+                }}
+              >
+                🗳️ ลงคะแนนอีกครั้ง
               </button>
 
               <button
                 type="button"
                 onClick={() => setStep("home")}
                 style={{
-                  flex: "1 1 140px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
-                  background: "white", color: "#374151", fontSize: 15, fontWeight: 700,
+                  flex: "1 1 120px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
+                  background: "white", color: "#374151", fontSize: 14, fontWeight: 700,
                   cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
                   justifyContent: "center", gap: 8
                 }}
@@ -946,19 +1116,15 @@ export default function ElectionApp() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setLoginName("");
-                  setLoginId("");
-                  setStep("login");
-                }}
+                onClick={handleNextVoter}
                 style={{
-                  flex: "1 1 140px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
-                  background: "white", color: "#64748B", fontSize: 14, fontWeight: 600,
+                  flex: "1 1 120px", padding: "13px 18px", borderRadius: 12, border: "2px solid #E2E8F0",
+                  background: "#F8FAFC", color: "#64748B", fontSize: 14, fontWeight: 600,
                   cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
                   justifyContent: "center", gap: 8
                 }}
               >
-                🚪 หน้าเข้าสู่ระบบ
+                🚪 ออกจากระบบ
               </button>
             </div>
           </div>
