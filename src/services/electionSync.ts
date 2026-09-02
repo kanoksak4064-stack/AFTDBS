@@ -65,15 +65,15 @@ export function mergeElectionData(a: ElectionData | null, b: ElectionData | null
   const resetTimeA = a?.resetTimestamp || 0;
   const resetTimeB = b?.resetTimestamp || 0;
 
-  // If one dataset had a full reset newer than the other, honor the reset
-  if (resetTimeA > 0 && resetTimeA > (b?.lastUpdated || 0)) {
+  // If one dataset has a newer resetTimestamp, that reset takes full precedence over older data
+  if (resetTimeA > resetTimeB) {
     return a!;
   }
-  if (resetTimeB > 0 && resetTimeB > (a?.lastUpdated || 0)) {
+  if (resetTimeB > resetTimeA) {
     return b!;
   }
 
-  // Merge votes by taking the maximum vote count for each candidate so no votes are lost across devices
+  // Same reset timestamp: Merge votes by taking the maximum vote count for each candidate so no votes are lost across devices
   const mergedVotes: Record<number, number> = { ...(a?.votes || {}) };
   for (const [k, v] of Object.entries(b?.votes || {})) {
     const num = Number(k);
@@ -176,6 +176,7 @@ export async function broadcastElectionData(data: ElectionData): Promise<boolean
   const payload: ElectionData = {
     ...data,
     lastUpdated: Date.now(),
+    resetTimestamp: data.resetTimestamp,
   };
 
   // Local BroadcastChannel for instant same-device sync
@@ -261,3 +262,50 @@ export async function submitVoteLive(
 
   return updatedData;
 }
+
+export async function resetVotesLive(
+  candidateList: Candidate[],
+  year: string
+): Promise<ElectionData> {
+  const resetVotes: Record<number, number> = {};
+  candidateList.forEach((c) => {
+    resetVotes[c.number] = 0;
+  });
+
+  const now = Date.now();
+  const resetData: ElectionData = {
+    year,
+    candidates: candidateList,
+    votes: resetVotes,
+    votedStudentIds: [],
+    lastUpdated: now,
+    resetTimestamp: now,
+  };
+
+  // 1. Local BroadcastChannel for instant same-device cross-tab update
+  try {
+    bc?.postMessage(resetData);
+  } catch {}
+
+  // 2. Local Express server update
+  try {
+    await fetch("/api/admin/reset-votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resetTimestamp: now, votes: resetVotes }),
+    });
+  } catch (err) {
+    console.warn("Local server reset failed or unreachable:", err);
+  }
+
+  // 3. Immediately update both Cloud relays with resetTimestamp
+  try {
+    await Promise.allSettled([
+      updateCloudStore(CLOUD_PRIMARY_URL, resetData),
+      updateCloudStore(CLOUD_BACKUP_URL, resetData),
+    ]);
+  } catch {}
+
+  return resetData;
+}
+

@@ -89,6 +89,7 @@ interface ElectionStore {
   votes: Record<number, number>;
   votedStudentIds: string[];
   lastUpdated: number;
+  resetTimestamp?: number;
 }
 
 const defaultData: ElectionStore = {
@@ -97,6 +98,7 @@ const defaultData: ElectionStore = {
   votes: { 1: 0, 2: 0, 3: 0, 4: 0 },
   votedStudentIds: [],
   lastUpdated: Date.now(),
+  resetTimestamp: 0,
 };
 
 function loadStore(): ElectionStore {
@@ -113,6 +115,7 @@ function loadStore(): ElectionStore {
         votes: parsed.votes || defaultData.votes,
         votedStudentIds: parsed.votedStudentIds || defaultData.votedStudentIds,
         lastUpdated: parsed.lastUpdated || Date.now(),
+        resetTimestamp: parsed.resetTimestamp || 0,
       };
     }
   } catch (err) {
@@ -184,6 +187,27 @@ async function syncFromCloud() {
       if (json?.data?.payload) {
         const cloudData = JSON.parse(json.data.payload);
         if (cloudData && cloudData.votes) {
+          const cloudReset = cloudData.resetTimestamp || 0;
+          const localReset = currentStore.resetTimestamp || 0;
+
+          if (cloudReset > localReset) {
+            // Cloud has newer reset: accept cloud state completely (resetting votes)
+            currentStore.resetTimestamp = cloudReset;
+            currentStore.votes = cloudData.votes;
+            if (cloudData.year) currentStore.year = cloudData.year;
+            if (cloudData.candidates?.length) currentStore.candidates = cloudData.candidates;
+            currentStore.votedStudentIds = cloudData.votedStudentIds || [];
+            currentStore.lastUpdated = cloudData.lastUpdated || Date.now();
+            saveStore();
+            broadcastUpdate();
+            return;
+          } else if (localReset > cloudReset) {
+            // Local has newer reset: propagate local reset to cloud
+            saveStore();
+            return;
+          }
+
+          // Same reset epoch: sync newer votes if cloud has higher total
           const totalLocalVotes = Object.values(currentStore.votes).reduce((a, b) => a + b, 0);
           const totalCloudVotes = Object.values(cloudData.votes as Record<number, number>).reduce((a, b) => a + b, 0);
           if (totalCloudVotes > totalLocalVotes) {
@@ -220,6 +244,7 @@ app.get("/api/election/stream", (req, res) => {
     votes: currentStore.votes,
     votedStudentIds: currentStore.votedStudentIds,
     lastUpdated: currentStore.lastUpdated,
+    resetTimestamp: currentStore.resetTimestamp || 0,
   });
   res.write(`data: ${initialPayload}\n\n`);
 
@@ -249,6 +274,7 @@ app.get("/api/election", (_req, res) => {
     votes: currentStore.votes,
     votedStudentIds: currentStore.votedStudentIds,
     lastUpdated: currentStore.lastUpdated,
+    resetTimestamp: currentStore.resetTimestamp || 0,
   });
 });
 
@@ -305,14 +331,38 @@ app.post("/api/admin/adjust-vote", (req, res) => {
   res.json({ success: true, votes: currentStore.votes });
 });
 
-app.post("/api/admin/reset-votes", (_req, res) => {
+app.post("/api/admin/set-candidate-vote", (req, res) => {
+  const { candidateNumber, voteCount } = req.body;
+  const num = Number(candidateNumber);
+  const count = Math.max(0, Number(voteCount) || 0);
+  if (!isNaN(num)) {
+    currentStore.votes[num] = count;
+    saveStore();
+  }
+  res.json({ success: true, votes: currentStore.votes });
+});
+
+app.post("/api/admin/reset-votes", (req, res) => {
   const resetVotes: Record<number, number> = {};
   currentStore.candidates.forEach((c) => {
     resetVotes[c.number] = 0;
   });
+  if (req.body?.votes && typeof req.body.votes === "object") {
+    Object.keys(req.body.votes).forEach((k) => {
+      resetVotes[Number(k)] = 0;
+    });
+  }
+  Object.keys(currentStore.votes).forEach((k) => {
+    resetVotes[Number(k)] = 0;
+  });
   currentStore.votes = resetVotes;
+  currentStore.votedStudentIds = [];
+  const reqReset = req.body?.resetTimestamp;
+  const now = typeof reqReset === "number" ? reqReset : Date.now();
+  currentStore.resetTimestamp = now;
+  currentStore.lastUpdated = now;
   saveStore();
-  res.json({ success: true, votes: currentStore.votes });
+  res.json({ success: true, votes: currentStore.votes, resetTimestamp: currentStore.resetTimestamp });
 });
 
 app.post("/api/admin/clear-voted-status", (_req, res) => {
@@ -322,12 +372,14 @@ app.post("/api/admin/clear-voted-status", (_req, res) => {
 });
 
 app.post("/api/admin/reset-all-default", (_req, res) => {
+  const now = Date.now();
   currentStore = {
     year: "ปีการศึกษา 2570",
     candidates: initialCandidates,
     votes: { 1: 0, 2: 0, 3: 0, 4: 0 },
     votedStudentIds: [],
-    lastUpdated: Date.now(),
+    lastUpdated: now,
+    resetTimestamp: now,
   };
   saveStore();
   res.json({ success: true, ...currentStore });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchLiveElectionData, broadcastElectionData, submitVoteLive, onLocalBroadcast } from "./services/electionSync";
+import { fetchLiveElectionData, broadcastElectionData, submitVoteLive, resetVotesLive, onLocalBroadcast } from "./services/electionSync";
 
 const LOGO = "data:image/png;base64,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";
 
@@ -105,6 +105,26 @@ export default function ElectionApp() {
   const [syncNotice, setSyncNotice] = useState<string>("");
   const [showVoterModal, setShowVoterModal] = useState<boolean>(false);
   const [voterSearch, setVoterSearch] = useState<string>("");
+  const [resetTimestamp, setResetTimestamp] = useState<number>(0);
+
+  // In-app Modal & Notification states (safe for iframes)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel?: string;
+    isDestructive?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
+  const showToast = (text: string, type: "success" | "error" | "info" = "success") => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev));
+    }, 4000);
+  };
 
   // Sync with server/cloud in real-time
   const isFetchingRef = useRef<boolean>(false);
@@ -118,6 +138,9 @@ export default function ElectionApp() {
     }
     if (data.votedStudentIds && Array.isArray(data.votedStudentIds)) {
       setVotedIds(data.votedStudentIds);
+    }
+    if (typeof data.resetTimestamp === "number") {
+      setResetTimestamp(data.resetTimestamp);
     }
     setLastSyncTime(new Date().toLocaleTimeString("th-TH"));
   };
@@ -324,6 +347,7 @@ export default function ElectionApp() {
             votes,
             votedStudentIds: votedIds,
             lastUpdated: Date.now(),
+            resetTimestamp,
           }
         );
         if (updated) {
@@ -335,6 +359,87 @@ export default function ElectionApp() {
         console.error("Failed to submit vote:", err);
       }
     }
+  };
+
+  const executeResetAllVotesToZero = async () => {
+    const resetVotes: Record<number, number> = {};
+    candidateList.forEach((c) => {
+      resetVotes[c.number] = 0;
+    });
+
+    const now = Date.now();
+
+    // 1. Update React state immediately
+    setVotes(resetVotes);
+    setVotedIds([]);
+    setHasVoted(false);
+    setSelected(null);
+    setResetTimestamp(now);
+
+    // 2. Clear browser local storage
+    localStorage.removeItem("election_has_voted");
+    localStorage.removeItem("election_student_id");
+    localStorage.setItem("election_votes", JSON.stringify(resetVotes));
+    localStorage.setItem("election_voted_ids", JSON.stringify([]));
+
+    // 3. Call full-stack live reset
+    try {
+      await resetVotesLive(candidateList, year);
+    } catch (err) {
+      console.error("Error resetting votes:", err);
+    }
+
+    setSyncNotice("✓ รีเซ็ตคะแนนโหวตทั้งหมดเป็น 0 เรียบร้อยแล้ว!");
+    showToast("✓ รีเซ็ตคะแนนโหวตทั้งหมดเป็น 0 เรียบร้อยแล้ว!", "success");
+    setTimeout(() => setSyncNotice(""), 4000);
+  };
+
+  const handleResetAllVotesToZero = () => {
+    setConfirmDialog({
+      title: "ยืนยันการรีเซ็ตคะแนนโหวตเป็น 0",
+      message: "คะแนนของผู้สมัครทุกคนจะถูกปรับเป็น 0 ทันที\nและล้างประวัติผู้มาใช้สิทธิ์เพื่อเริ่มการเลือกตั้งใหม่\nข้อมูลจะซิงค์ไปยังทุกเครื่องและบันทึกลงระบบทันที",
+      confirmLabel: "🔄 ยืนยันรีเซ็ตคะแนนเป็น 0",
+      cancelLabel: "ยกเลิก",
+      isDestructive: true,
+      onConfirm: executeResetAllVotesToZero,
+    });
+  };
+
+  const handleResetSingleCandidateVotes = (candidateNumber: number, candidateName: string) => {
+    setConfirmDialog({
+      title: `รีเซ็ตคะแนน เบอร์ ${candidateNumber}`,
+      message: `คุณต้องการรีเซ็ตคะแนนของ "เบอร์ ${candidateNumber}: ${candidateName}" ให้กลับเป็น 0 ใช่หรือไม่?`,
+      confirmLabel: "เซ็ตคะแนนเป็น 0",
+      cancelLabel: "ยกเลิก",
+      isDestructive: true,
+      onConfirm: async () => {
+        const newVotes = {
+          ...votes,
+          [candidateNumber]: 0,
+        };
+        setVotes(newVotes);
+        localStorage.setItem("election_votes", JSON.stringify(newVotes));
+
+        try {
+          await fetch("/api/admin/set-candidate-vote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidateNumber, voteCount: 0 }),
+          });
+        } catch {}
+
+        broadcastElectionData({
+          year,
+          candidates: candidateList,
+          votes: newVotes,
+          votedStudentIds: votedIds,
+          lastUpdated: Date.now(),
+          resetTimestamp,
+        });
+
+        showToast(`✓ รีเซ็ตคะแนน เบอร์ ${candidateNumber} เป็น 0 เรียบร้อยแล้ว`, "success");
+      },
+    });
   };
 
   const getPercent = (num: number) =>
@@ -1055,6 +1160,19 @@ export default function ElectionApp() {
                 >
                   🔄 ดึงคะแนนสด
                 </button>
+                <button
+                  type="button"
+                  onClick={handleResetAllVotesToZero}
+                  title="รีเซ็ตคะแนนโหวตของผู้สมัครทุกคนกลับเป็น 0"
+                  style={{
+                    border: "1.5px solid #FCA5A5", background: "#FEF2F2", borderRadius: 8,
+                    padding: "4px 12px", fontSize: 12, fontWeight: 800, color: "#DC2626",
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                    transition: "all 0.2s"
+                  }}
+                >
+                  🔄 รีเซ็ตคะแนนเป็น 0
+                </button>
               </div>
             </div>
 
@@ -1147,6 +1265,19 @@ export default function ElectionApp() {
                 }}
               >
                 🗳️ ลงคะแนนอีกครั้ง
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetAllVotesToZero}
+                style={{
+                  flex: "1 1 170px", padding: "13px 18px", borderRadius: 12, border: "2px solid #EF4444",
+                  background: "#FEF2F2", color: "#DC2626", fontSize: 14, fontWeight: 800,
+                  cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 8, boxShadow: "0 2px 6px rgba(239,68,68,0.1)"
+                }}
+              >
+                🔄 รีเซ็ตคะแนนเป็น 0
               </button>
 
               <button
@@ -1254,6 +1385,20 @@ export default function ElectionApp() {
                         🔄
                       </span>
                       {isManualSyncing ? "กำลังซิงค์..." : "ดึงคะแนนสดทันที"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResetAllVotesToZero}
+                      style={{
+                        padding: "8px 14px", borderRadius: 10, border: "1.5px solid #EF4444",
+                        background: "#FEF2F2", color: "#DC2626", fontWeight: 800, fontSize: 13,
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                        boxShadow: "0 2px 4px rgba(239,68,68,0.15)"
+                      }}
+                      title="รีเซ็ตคะแนนโหวตทั้งหมดกลับเป็น 0"
+                    >
+                      🔄 รีเซ็ตคะแนนเป็น 0
                     </button>
 
                     <button
@@ -1449,7 +1594,7 @@ export default function ElectionApp() {
                           votedStudentIds: votedIds,
                           lastUpdated: Date.now(),
                         });
-                        alert("อัปเดต ปีการศึกษา เรียบร้อยแล้ว!");
+                        showToast("✓ อัปเดต ปีการศึกษา เรียบร้อยแล้ว!", "success");
                       }}
                       style={{
                         padding: "11px 20px", borderRadius: 8, border: "none",
@@ -1645,11 +1790,11 @@ export default function ElectionApp() {
                   type="button"
                   onClick={() => {
                     if (!newCamName.trim()) {
-                      alert("กรุณากรอกชื่อแผนกวิชา / ชื่อผู้สมัคร");
+                      showToast("⚠️ กรุณากรอกชื่อแผนกวิชา / ชื่อผู้สมัคร", "error");
                       return;
                     }
                     if (!newCamSlogan.trim()) {
-                      alert("กรุณากรอกสโลแกนประจำใจ");
+                      showToast("⚠️ กรุณากรอกสโลแกนประจำใจ", "error");
                       return;
                     }
 
@@ -1685,6 +1830,7 @@ export default function ElectionApp() {
                       votes: updatedVotes,
                       votedStudentIds: votedIds,
                       lastUpdated: Date.now(),
+                      resetTimestamp,
                     });
 
                     // Reset form states
@@ -1693,7 +1839,7 @@ export default function ElectionApp() {
                     setNewCamEmoji("👤");
                     setNewCamImage("");
                     setNewCamPolicies("");
-                    alert("บันทึกข้อมูลผู้สมัครรายใหม่ เรียบร้อยแล้ว!");
+                    showToast("✓ บันทึกข้อมูลผู้สมัครรายใหม่เรียบร้อยแล้ว!", "success");
                   }}
                   style={{
                     width: "100%", padding: "12px", borderRadius: 10, border: "none",
@@ -1888,11 +2034,11 @@ export default function ElectionApp() {
                               type="button"
                               onClick={() => {
                                 if (!editCamName.trim()) {
-                                  alert("กรุณากรอกชื่อแผนกวิชา / ชื่อผู้สมัคร");
+                                  showToast("⚠️ กรุณากรอกชื่อแผนกวิชา / ชื่อผู้สมัคร", "error");
                                   return;
                                 }
                                 if (!editCamSlogan.trim()) {
-                                  alert("กรุณากรอกสโลแกนประจำใจ");
+                                  showToast("⚠️ กรุณากรอกสโลแกนประจำใจ", "error");
                                   return;
                                 }
 
@@ -1923,9 +2069,10 @@ export default function ElectionApp() {
                                   votes,
                                   votedStudentIds: votedIds,
                                   lastUpdated: Date.now(),
+                                  resetTimestamp,
                                 });
                                 setEditingCandidateNum(null);
-                                alert(`แก้ไขข้อมูลผู้สมัคร เบอร์ ${c.number} เรียบร้อยแล้ว!`);
+                                showToast(`✓ แก้ไขข้อมูลผู้สมัคร เบอร์ ${c.number} เรียบร้อยแล้ว!`, "success");
                               }}
                               style={{
                                 flex: 1, padding: "10px", borderRadius: 8, border: "none",
@@ -2029,6 +2176,7 @@ export default function ElectionApp() {
                                   votes: newVotes,
                                   votedStudentIds: votedIds,
                                   lastUpdated: Date.now(),
+                                  resetTimestamp,
                                 });
                               }}
                               style={{
@@ -2038,6 +2186,19 @@ export default function ElectionApp() {
                               }}
                             >
                               +
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleResetSingleCandidateVotes(c.number, c.name)}
+                              title={`รีเซ็ตคะแนนของ เบอร์ ${c.number}: ${c.name} เป็น 0`}
+                              style={{
+                                padding: "3px 8px", borderRadius: 6, border: "1px solid #FECACA",
+                                background: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 700,
+                                cursor: "pointer", whiteSpace: "nowrap"
+                              }}
+                            >
+                              เซ็ตเป็น 0
                             </button>
                           </div>
 
@@ -2066,20 +2227,29 @@ export default function ElectionApp() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm(`คุณแน่ใจหรือไม่ที่จะลบ "เบอร์ ${c.number}: ${c.name}" ออกจากระบบ?`)) {
-                                const updatedCandidates = candidateList.filter(cand => cand.number !== c.number);
-                                const newVotes = { ...votes };
-                                delete newVotes[c.number];
-                                setCandidateList(updatedCandidates);
-                                setVotes(newVotes);
-                                broadcastElectionData({
-                                  year,
-                                  candidates: updatedCandidates,
-                                  votes: newVotes,
-                                  votedStudentIds: votedIds,
-                                  lastUpdated: Date.now(),
-                                });
-                              }
+                              setConfirmDialog({
+                                title: `ลบผู้สมัคร เบอร์ ${c.number}`,
+                                message: `คุณแน่ใจหรือไม่ที่จะลบ "เบอร์ ${c.number}: ${c.name}" ออกจากระบบ?`,
+                                confirmLabel: "ลบผู้สมัคร",
+                                cancelLabel: "ยกเลิก",
+                                isDestructive: true,
+                                onConfirm: () => {
+                                  const updatedCandidates = candidateList.filter(cand => cand.number !== c.number);
+                                  const newVotes = { ...votes };
+                                  delete newVotes[c.number];
+                                  setCandidateList(updatedCandidates);
+                                  setVotes(newVotes);
+                                  broadcastElectionData({
+                                    year,
+                                    candidates: updatedCandidates,
+                                    votes: newVotes,
+                                    votedStudentIds: votedIds,
+                                    lastUpdated: Date.now(),
+                                    resetTimestamp,
+                                  });
+                                  showToast(`ลบผู้สมัคร เบอร์ ${c.number} เรียบร้อยแล้ว`, "info");
+                                }
+                              });
                             }}
                             style={{
                               background: "#FEF2F2", color: "#EF4444", border: "1px solid #FCA5A5",
@@ -2105,23 +2275,7 @@ export default function ElectionApp() {
                 <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (confirm("คุณแน่ใจหรือไม่ที่จะรีเซ็ตคะแนนโหวตทั้งหมดกลับไปเป็น 0?")) {
-                        const resetVotes: Record<number, number> = {};
-                        candidateList.forEach(c => {
-                          resetVotes[c.number] = 0;
-                        });
-                        setVotes(resetVotes);
-                        broadcastElectionData({
-                          year,
-                          candidates: candidateList,
-                          votes: resetVotes,
-                          votedStudentIds: votedIds,
-                          lastUpdated: Date.now(),
-                        });
-                        alert("รีเซ็ตคะแนนโหวตทั้งหมดเป็น 0 เรียบร้อยแล้ว!");
-                      }
-                    }}
+                    onClick={handleResetAllVotesToZero}
                     style={{
                       flex: "1 1 180px", padding: "11px", borderRadius: 8, border: "2px solid #EF4444",
                       background: "white", color: "#EF4444", fontSize: 13, fontWeight: "bold", cursor: "pointer"
@@ -2132,16 +2286,23 @@ export default function ElectionApp() {
 
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (confirm("กรุณายืนยันการล้างประวัติการโหวตของผู้ใช้งานทุกคน (เพื่อให้สามารถเริ่มลงคะแนนใหม่ได้)?")) {
-                        setHasVoted(false);
-                        localStorage.removeItem("election_has_voted");
-                        localStorage.removeItem("election_student_id");
-                        try {
-                          await fetch("/api/admin/clear-voted-status", { method: "POST" });
-                        } catch {}
-                        alert("ล้างประวัติการลงคะแนนเรียบร้อยแล้ว! ทุกท่านสามารถเข้ามาลงคะแนนใหม่ได้");
-                      }
+                    onClick={() => {
+                      setConfirmDialog({
+                        title: "ล้างสถานะผู้ใช้สิทธิ์โหวต",
+                        message: "กรุณายืนยันการล้างประวัติการโหวตของผู้ใช้งานทุกคน เพื่อให้สามารถเริ่มลงคะแนนใหม่ได้",
+                        confirmLabel: "ล้างสถานะโหวต",
+                        cancelLabel: "ยกเลิก",
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          setHasVoted(false);
+                          localStorage.removeItem("election_has_voted");
+                          localStorage.removeItem("election_student_id");
+                          try {
+                            await fetch("/api/admin/clear-voted-status", { method: "POST" });
+                          } catch {}
+                          showToast("✓ ล้างประวัติการลงคะแนนเรียบร้อยแล้ว! ทุกท่านสามารถลงคะแนนใหม่ได้", "success");
+                        }
+                      });
                     }}
                     style={{
                       flex: "1 1 180px", padding: "11px", borderRadius: 8, border: "2px solid #CA8A04",
@@ -2153,24 +2314,31 @@ export default function ElectionApp() {
 
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (confirm("กรุณายืนยันการตั้งค่าผู้สมัครทั้งหมดกลับไปเป็นค่าเริ่มต้นจากวิทยาลัย?")) {
-                        setCandidateList(initialCandidates);
-                        const rVotes: Record<number, number> = {};
-                        initialCandidates.forEach(c => {
-                          rVotes[c.number] = 0;
-                        });
-                        setVotes(rVotes);
-                        setHasVoted(false);
-                        localStorage.removeItem("election_has_voted");
-                        localStorage.removeItem("election_student_id");
-                        localStorage.removeItem("election_candidates");
-                        localStorage.removeItem("election_votes");
-                        try {
-                          await fetch("/api/admin/reset-all-default", { method: "POST" });
-                        } catch {}
-                        alert("รีเซ็ตรายชื่อผู้สมัครและคะแนนโหวตเป็นค่าเริ่มต้นเรียบร้อยแล้ว!");
-                      }
+                    onClick={() => {
+                      setConfirmDialog({
+                        title: "ตั้งค่าผู้สมัครกลับเป็นค่าเริ่มต้น",
+                        message: "กรุณายืนยันการตั้งค่าผู้สมัครทั้งหมดและคะแนนโหวตกลับไปเป็นค่าเริ่มต้นจากวิทยาลัย",
+                        confirmLabel: "รีเซ็ตเป็นค่าเริ่มต้น",
+                        cancelLabel: "ยกเลิก",
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          setCandidateList(initialCandidates);
+                          const rVotes: Record<number, number> = {};
+                          initialCandidates.forEach(c => {
+                            rVotes[c.number] = 0;
+                          });
+                          setVotes(rVotes);
+                          setHasVoted(false);
+                          localStorage.removeItem("election_has_voted");
+                          localStorage.removeItem("election_student_id");
+                          localStorage.removeItem("election_candidates");
+                          localStorage.removeItem("election_votes");
+                          try {
+                            await fetch("/api/admin/reset-all-default", { method: "POST" });
+                          } catch {}
+                          showToast("✓ รีเซ็ตรายชื่อผู้สมัครและคะแนนโหวตเป็นค่าเริ่มต้นเรียบร้อยแล้ว!", "success");
+                        }
+                      });
                     }}
                     style={{
                       flex: "1 1 180px", padding: "11px", borderRadius: 8, border: "2px solid #64748B",
@@ -2355,6 +2523,104 @@ export default function ElectionApp() {
         />
         <span>{ORG_NAME} · {SCHOOL_NAME} · {year}</span>
       </footer>
+
+      {/* Floating Global Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+          background: toastMessage.type === "error" ? "#EF4444" : toastMessage.type === "info" ? "#0284C7" : "#16A34A",
+          color: "white", padding: "12px 22px", borderRadius: 30, fontWeight: 800, fontSize: 14,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.25)", zIndex: 10001, display: "flex", alignItems: "center", gap: 12,
+          maxWidth: "92vw", transition: "all 0.3s ease", pointerEvents: "auto"
+        }}>
+          <span>{toastMessage.text}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            style={{
+              background: "rgba(255,255,255,0.25)", border: "none", color: "white",
+              borderRadius: "50%", width: 22, height: 22, cursor: "pointer",
+              fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+              lineHeight: 1
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Global In-App Confirmation Modal (Safe for iframes & Mobile) */}
+      {confirmDialog && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(15, 23, 42, 0.7)", zIndex: 10000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16, backdropFilter: "blur(6px)"
+          }}
+          onClick={() => setConfirmDialog(null)}
+        >
+          <div
+            style={{
+              background: "white", borderRadius: 20, width: "100%", maxWidth: 440,
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)", overflow: "hidden",
+              padding: "26px 24px", textAlign: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              width: 58, height: 58, borderRadius: "50%",
+              background: confirmDialog.isDestructive ? "#FEF2F2" : "#EFF6FF",
+              color: confirmDialog.isDestructive ? "#DC2626" : "#2563EB",
+              fontSize: 28, display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px",
+              border: confirmDialog.isDestructive ? "2px solid #FCA5A5" : "2px solid #BFDBFE"
+            }}>
+              {confirmDialog.isDestructive ? "⚠️" : "ℹ️"}
+            </div>
+
+            <h3 style={{ margin: "0 0 10px", fontSize: 19, fontWeight: 800, color: "#0F172A" }}>
+              {confirmDialog.title}
+            </h3>
+
+            <p style={{ margin: "0 0 24px", fontSize: 14, color: "#64748B", lineHeight: 1.6, whiteSpace: "pre-line" }}>
+              {confirmDialog.message}
+            </p>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: 12, border: "1.5px solid #CBD5E1",
+                  background: "#F8FAFC", color: "#475569", fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "inherit"
+                }}
+              >
+                {confirmDialog.cancelLabel || "ยกเลิก"}
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  await action();
+                }}
+                style={{
+                  flex: 1.3, padding: "12px", borderRadius: 12, border: "none",
+                  background: confirmDialog.isDestructive ? "#DC2626" : "#2563EB",
+                  color: "white", fontSize: 14, fontWeight: 800,
+                  cursor: "pointer", fontFamily: "inherit",
+                  boxShadow: confirmDialog.isDestructive ? "0 4px 14px rgba(220,38,38,0.35)" : "0 4px 14px rgba(37,99,235,0.35)"
+                }}
+              >
+                {confirmDialog.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
