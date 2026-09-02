@@ -228,7 +228,7 @@ export default function ElectionApp() {
             style={{ width: 42, height: 42, objectFit: "contain", flexShrink: 0 }} 
           />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.3 }}>เลือกตั้งนายก อวท.</div>
+            <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.3 }}>การเลือกตั้งนายก องค์การนักวิชาชีพในอนาคตแห่งประเทศไทย</div>
             <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2, fontWeight: 500 }}>{SCHOOL_NAME} · {year}</div>
           </div>
         </div>
@@ -276,11 +276,15 @@ export default function ElectionApp() {
                   style={{ width: 80, height: 80, objectFit: "contain", margin: "0 auto 16px", filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} 
                 />
 
-                <div style={{ fontSize: 15, opacity: 0.95, letterSpacing: 0.5, fontWeight: 800, marginBottom: 6 }}>
+                <div style={{ fontSize: 14, opacity: 0.95, letterSpacing: 0.5, fontWeight: 700, marginBottom: 4 }}>
                   {SCHOOL_NAME}
                 </div>
-                <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800 }}>การเลือกตั้งนายก</h1>
-                <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 4 }}>{ORG_NAME}</div>
+                <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>
+                  การเลือกตั้งนายก
+                </h1>
+                <div style={{ fontSize: 13.5, fontWeight: 700, opacity: 0.95, marginBottom: 8, lineHeight: 1.4 }}>
+                  {ORG_NAME}
+                </div>
                 <div style={{
                   display: "inline-block", background: "#F5C518", color: "#7B1C1C",
                   borderRadius: 20, padding: "3px 14px", fontSize: 12, fontWeight: 800,
@@ -474,9 +478,13 @@ export default function ElectionApp() {
                 style={{ width: 72, height: 72, objectFit: "contain", margin: "0 auto 12px", filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.2))" }} 
               />
 
-              <div style={{ fontSize: 15, opacity: 0.95, letterSpacing: 0.5, fontWeight: 800, marginBottom: 6 }}>{SCHOOL_NAME}</div>
-              <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800 }}>การเลือกตั้งนายก</h1>
-              <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>{ORG_NAME}</div>
+              <div style={{ fontSize: 14, opacity: 0.95, letterSpacing: 0.5, fontWeight: 700, marginBottom: 4 }}>{SCHOOL_NAME}</div>
+              <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>
+                การเลือกตั้งนายก
+              </h1>
+              <div style={{ fontSize: 13.5, fontWeight: 700, opacity: 0.95, marginBottom: 8, lineHeight: 1.4 }}>
+                {ORG_NAME}
+              </div>
               <div style={{
                 display: "inline-block", background: "#F5C518", color: "#7B1C1C",
                 borderRadius: 20, padding: "2px 14px", fontSize: 12, fontWeight: 800, marginBottom: 18,
